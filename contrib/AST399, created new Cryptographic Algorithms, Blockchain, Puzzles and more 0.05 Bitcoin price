@@ -1,0 +1,127 @@
+import secrets
+import json
+from datetime import datetime
+
+class AST399:
+    def __init__(self, bet_factor, kelly_criterion):
+        self.BET_FACTOR = bet_factor
+        self.KELLY_CRITERION = kelly_criterion
+        self.X_FACTOR = secrets.randbelow(1001) / 1000
+
+    def generate_key(self):
+        return secrets.token_bytes(399)
+
+    def encrypt(self, plaintext, key):
+        if len(key) != 399:
+            raise ValueError("Key must be exactly 399 bytes")
+
+        ciphertext = bytearray()
+        for i, byte in enumerate(plaintext):
+            key_byte = key[i % 399]
+            bet_adjustment = int(self.BET_FACTOR * self.KELLY_CRITERION * 255) & 0xFF
+            x_adjustment = int(self.X_FACTOR * 255) & 0xFF
+            
+            encrypted_byte = (byte + key_byte + bet_adjustment + x_adjustment) % 256
+            ciphertext.append(encrypted_byte)
+
+        return bytes(ciphertext)
+
+    def decrypt(self, ciphertext, key):
+        if len(key) != 399:
+            raise ValueError("Key must be exactly 399 bytes")
+
+        plaintext = bytearray()
+        for i, byte in enumerate(ciphertext):
+            key_byte = key[i % 399]
+            bet_adjustment = int(self.BET_FACTOR * self.KELLY_CRITERION * 255) & 0xFF
+            x_adjustment = int(self.X_FACTOR * 255) & 0xFF
+            
+            decrypted_byte = (byte - key_byte - bet_adjustment - x_adjustment) % 256
+            plaintext.append(decrypted_byte)
+
+        return bytes(plaintext)
+
+class ProductKeyVault:
+    def __init__(self, btc_address, min_payment):
+        self.BTC_ADDRESS = btc_address
+        self.MIN_PAYMENT = min_payment
+        self.ast399 = AST399(bet_factor=0.05, kelly_criterion=0.1)
+        self.purchases = {}
+
+    def generate_key(self):
+        return self.ast399.generate_key()
+
+    def process_purchase(self, user_input, payment_amount):
+        if payment_amount > self.MIN_PAYMENT:
+            product_key = self.generate_key()
+            encrypted_data = self.ast399.encrypt(user_input.encode(), product_key)
+            purchase_time = datetime.now().isoformat()
+            self.purchases[product_key.hex()] = {
+                "user_input": user_input,
+                "payment_amount": payment_amount,
+                "purchase_time": purchase_time,
+                "encrypted_data": encrypted_data.hex()
+            }
+            return product_key.hex()
+        else:
+            return None
+
+    def verify_access(self, product_key):
+        return product_key in self.purchases
+
+    def get_purchase_info(self, product_key):
+        return self.purchases.get(product_key)
+
+    def save_purchases(self, filename):
+        with open(filename, 'w') as f:
+            json.dump(self.purchases, f)
+
+    def load_purchases(self, filename):
+        try:
+            with open(filename, 'r') as f:
+                self.purchases = json.load(f)
+        except FileNotFoundError:
+            print("File not found. Creating new database.")
+
+def main():
+    btc_address = "1LVW6zyMk88KDBn9qLAkPuTtFbDeErmpdp"
+    min_payment = 0.05
+    
+    vault = ProductKeyVault(btc_address, min_payment)
+    vault.load_purchases("purchases.json")
+
+    while True:
+        print(f"\nBTC Address: {btc_address}")
+        print(f"Minimum payment required: {min_payment} BTC")
+        print("\n1. Purchase Product")
+        print("2. Access Product")
+        print("3. Exit")
+        choice = input("Select option (1/2/3): ")
+
+        if choice == '1':
+            user_input = input("Enter your product data: ")
+            payment_amount = float(input("Enter payment amount in BTC: "))
+            product_key = vault.process_purchase(user_input, payment_amount)
+            if product_key:
+                print(f"Payment received. Your Product Key: {product_key}")
+                vault.save_purchases("purchases.json")
+            else:
+                print("Insufficient payment.")
+
+        elif choice == '2':
+            product_key = input("Enter your Product Key: ")
+            if vault.verify_access(product_key):
+                info = vault.get_purchase_info(product_key)
+                print(f"Access granted. Purchase info: {info}")
+            else:
+                print("Invalid or not found Product Key.")
+
+        elif choice == '3':
+            print("Thank you for using our service.")
+            break
+
+        else:
+            print("Invalid choice. Please try again.")
+
+if __name__ == "__main__":
+    main()
